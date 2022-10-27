@@ -30,7 +30,8 @@ type coolMQ struct {
 	producerChan chan bool // 带缓存的channel,控制生产者的并发数量上限
 	consumerChan chan bool // 带缓存的channel,控制消费者的并发数量上限
 	consumer     func(msg *Msg)
-	wg           *sync.WaitGroup
+	msgWg        *sync.WaitGroup // 用于保证msg不丢失：避免数据没来得及放入通道就被关闭
+	consumerWg   *sync.WaitGroup // 用于保证所有的consumer完成
 }
 
 func newCoolMQ(topic string, producerLimit, consumerLimit int, consumer func(msg *Msg)) *coolMQ {
@@ -47,7 +48,8 @@ func newCoolMQ(topic string, producerLimit, consumerLimit int, consumer func(msg
 		producerChan: producerChan,
 		consumerChan: consumerChan,
 		consumer:     consumer,
-		wg:           &sync.WaitGroup{},
+		msgWg:        &sync.WaitGroup{},
+		consumerWg:   &sync.WaitGroup{},
 	}
 }
 
@@ -57,8 +59,9 @@ func (mq *coolMQ) consume() {
 	log.Info(msg)
 	for d := range mq.dataChan {
 		mq.consumerChan <- true
-		mq.wg.Add(1)
+		mq.consumerWg.Add(1)
 		go mq.consumer(d)
+		mq.msgWg.Done()
 		<-mq.producerChan
 	}
 	msg = "关闭mq数据通道: " + mq.topic
@@ -70,7 +73,7 @@ func (mq *coolMQ) consume() {
 type center struct {
 	mapMQ        map[string]*coolMQ // key: topic
 	producerChan chan bool          // 用于控制全部生产者的并发数量
-	topicWg      *sync.WaitGroup
+	topicWg      *sync.WaitGroup    // 用于保证所有的topic都完成
 }
 
 func newCenter() *center {
@@ -110,7 +113,7 @@ func (c *center) AddTopic(topic string, producerLimit, consumerLimit int, consum
 // 消费完一个数据
 func (c *center) Done(topic string) {
 	if c.has(topic) {
-		c.mq(topic).wg.Done()
+		c.mq(topic).consumerWg.Done()
 		// 释放 producer 以及 consumer 的限制
 		<-c.mq(topic).consumerChan
 		<-c.producerChan
@@ -127,6 +130,7 @@ func (c *center) Produce(topic string, data any) {
 	if c.has(topic) {
 		mq := c.mq(topic)
 		c.producerChan <- true // 控制整体的并发数量：防止oom
+		mq.msgWg.Add(1)
 		go func(mq *coolMQ) {
 			mq.producerChan <- true
 			msg := &Msg{
@@ -149,7 +153,8 @@ func (c *center) Work() {
 func (c *center) close(topic string) {
 	if c.has(topic) {
 		mq := c.mq(topic)
-		mq.wg.Wait()
+		mq.msgWg.Wait()      // 等待 msg 都被消费
+		mq.consumerWg.Wait() // 等待所有的 consumer 完成
 		close(mq.dataChan)
 		c.topicWg.Done()
 	}

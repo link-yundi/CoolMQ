@@ -19,7 +19,7 @@ func TestMQ(t *testing.T) {
 	task3 := "task3"
 	// ========================== 添加主题 ==========================
 	CoolMQ.AddTopic(task1, 100, 100, handler1) // 通过producerLimit以及consumerLimit控制任务效率
-	CoolMQ.AddTopic(task2, 100, 20, handler2)
+	CoolMQ.AddTopic(task2, 20, 100, handler2)
 	CoolMQ.AddTopic(task3, 100, 100, handler3)
 	// ========================== 控制整体并发 ==========================
 	CoolMQ.SetProducerLimit(300)
