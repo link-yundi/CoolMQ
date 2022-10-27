@@ -1,8 +1,6 @@
 package coolmq
 
 import (
-	"fmt"
-	log "github.com/link-yundi/ylog"
 	"testing"
 	"time"
 )
@@ -28,31 +26,28 @@ func TestMQ(t *testing.T) {
 	// ========================== 启动 ==========================
 	CoolMQ.Work()
 	for i := 0; i < 100; i++ {
-		log.Debug(i)
 		// ========================== 生产数据 ==========================
 		CoolMQ.Produce(task1, i)
 		CoolMQ.Produce(task2, i)
 		CoolMQ.Produce(task3, i)
 	}
-	// ========================== 堵塞等待 ==========================
-	CoolMQ.Wait()
-	CoolMQ.Close()
+	CoolMQ.Close() // 先完成的先关闭释放
 }
 
 func handler1(msg *Msg) {
-	fmt.Println(msg.Topic, msg.Data.(int))
+	//fmt.Println(msg.Topic, msg.Data.(int))
 	time.Sleep(1 * time.Second)
 	CoolMQ.Done(msg.Topic)
 }
 
 func handler2(msg *Msg) {
-	fmt.Println(msg.Topic, msg.Data.(int))
+	//fmt.Println(msg.Topic, msg.Data.(int))
 	time.Sleep(10 * time.Second)
 	CoolMQ.Done(msg.Topic)
 }
 
 func handler3(msg *Msg) {
-	fmt.Println(msg.Topic, msg.Data.(int))
+	//fmt.Println(msg.Topic, msg.Data.(int))
 	time.Sleep(5 * time.Second)
 	CoolMQ.Done(msg.Topic)
 }

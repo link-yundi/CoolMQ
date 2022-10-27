@@ -70,6 +70,7 @@ func (mq *coolMQ) consume() {
 type center struct {
 	mapMQ        map[string]*coolMQ // key: topic
 	producerChan chan bool          // 用于控制全部生产者的并发数量
+	topicWg      *sync.WaitGroup
 }
 
 func newCenter() *center {
@@ -77,6 +78,7 @@ func newCenter() *center {
 	return &center{
 		mapMQ:        mapMQ,
 		producerChan: make(chan bool),
+		topicWg:      &sync.WaitGroup{},
 	}
 }
 
@@ -115,11 +117,9 @@ func (c *center) Done(topic string) {
 	}
 }
 
-// 等待
-func (c *center) Wait() {
-	for _, mq := range c.mapMQ {
-		mq.wg.Wait()
-	}
+func (c *center) wait() {
+	c.topicWg.Wait()
+	log.Info("所有 TopicMQ 已关闭")
 }
 
 // 生产数据
@@ -140,12 +140,25 @@ func (c *center) Produce(topic string, data any) {
 
 func (c *center) Work() {
 	for _, mq := range c.mapMQ {
+		c.topicWg.Add(1)
 		go mq.consume()
 	}
 }
 
-func (c *center) Close() {
-	for _, mq := range c.mapMQ {
+// 关闭指定topic
+func (c *center) close(topic string) {
+	if c.has(topic) {
+		mq := c.mq(topic)
+		mq.wg.Wait()
 		close(mq.dataChan)
+		c.topicWg.Done()
 	}
+}
+
+// 关闭所有topic
+func (c *center) Close() {
+	for topic, _ := range c.mapMQ {
+		go c.close(topic)
+	}
+	c.wait()
 }
