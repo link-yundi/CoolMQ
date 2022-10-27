@@ -3,7 +3,7 @@
 ### 安装
 
 ```sh
-go get -u github.com/link-yundi/CoolMQ
+go get -u github.com/link-yundi/coolmq
 ```
 
 ### 特性
