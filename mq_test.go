@@ -1,8 +1,8 @@
 package coolmq
 
 import (
+	"fmt"
 	log "github.com/link-yundi/ylog"
-	"strconv"
 	"testing"
 	"time"
 )
@@ -29,7 +29,7 @@ func TestMQ(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		// ========================== task1新增子任务 ==========================
 		for a := 0; a < 10; a++ {
-			topic1 := strconv.FormatInt(int64(a), 10)
+			topic1 := fmt.Sprintf("%d_%d", i, a)
 			AddTopic(topic1, 10, 10, handler1, nil)
 			Produce(task1, i)
 		}

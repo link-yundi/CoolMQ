@@ -60,8 +60,6 @@ func (mq *coolMQ) consume() {
 		mq.consumerChan <- true
 		mq.consumerWg.Add(1)
 		go mq.consumer(d)
-		mq.msgWg.Done()
-		<-mq.producerChan
 	}
 	msg = "关闭mq数据通道: " + mq.topic
 	log.Trace(msg)
@@ -108,7 +106,9 @@ func AddTopic(topic string, producerLimit, consumerLimit int, consumer func(msg 
 func Done(topic string) {
 	if has(topic) {
 		mq := getMq(topic)
+		mq.msgWg.Done()
 		mq.consumerWg.Done()
+		<-mq.producerChan
 		// 释放 producer 以及 consumer 的限制
 		<-mq.consumerChan
 		<-producerChan

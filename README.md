@@ -16,49 +16,48 @@ go get -u github.com/link-yundi/coolmq
 ### 示例
 
 ```go
-
 func main() {
 	task1 := "task1"
 	task2 := "task2"
 	task3 := "task3"
 	// ========================== 添加主题 ==========================
-	CoolMQ.AddTopic(task1, 100, 100, handler1, task1Close) // 控制task1的速度
-	CoolMQ.AddTopic(task2, 100, 20, handler2, nil) 
-	CoolMQ.AddTopic(task3, 100, 100, handler3, nil)
+	coolmq.AddTopic(task1, 100, 100, handler1, task1Close) // 控制task1的速度
+	coolmq.AddTopic(task2, 100, 20, handler2, nil) 
+	coolmq.AddTopic(task3, 100, 100, handler3, nil)
 	// ========================== 控制整体并发 ==========================
-	CoolMQ.SetProducerLimit(300)
+    coolmq.SetProducerLimit(300)
 	for i := 0; i < 100; i++ {
 		log.Debug(i)
 		// ========================== 生产数据 ==========================
 		// ========================== task1新增子任务 ==========================
 		for a := 0; a < 10; a++ {
-        topic1 := strconv.FormatInt(int64(a), 10)
-        AddTopic(topic1, 10, 10, handler1, nil)
-        Produce(task1, i)
+            topic1 := fmt.Sprintf("%d_%d", i, a)
+            AddTopic(topic1, 10, 10, handler1, nil)
+            Produce(task1, i)
         }
-        Produce(task2, i)
-        Produce(task3, i)
+        coolmq.Produce(task2, i)
+        coolmq.Produce(task3, i)
 	}
 	// ========================== 堵塞等待关闭 ==========================
-	CoolMQ.Close()
+	coolmq.Close()
 }
 
 func handler1(msg *Msg) {
 	fmt.Println(msg.Topic, msg.Data.(int))
 	time.Sleep(1 * time.Second)
-	CoolMQ.Done(msg.Topic)
+	coolmq.Done(msg.Topic)
 }
 
 func handler2(msg *Msg) {
 	fmt.Println(msg.Topic, msg.Data.(int))
 	time.Sleep(10 * time.Second)
-	CoolMQ.Done(msg.Topic)
+	coolmq.Done(msg.Topic)
 }
 
 func handler3(msg *Msg) {
 	fmt.Println(msg.Topic, msg.Data.(int))
 	time.Sleep(5 * time.Second)
-	CoolMQ.Done(msg.Topic)
+	coolmq.Done(msg.Topic)
 }
 
 func task1Close(topic string) {
