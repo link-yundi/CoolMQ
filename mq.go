@@ -28,6 +28,7 @@ type coolMQ struct {
 	producerChan chan bool // 带缓存的channel,控制生产者的并发数量上限
 	consumerChan chan bool // 带缓存的channel,控制消费者的并发数量上限
 	consumer     func(msg *Msg)
+	onClose      func(topic string)
 	msgWg        *sync.WaitGroup // 用于保证msg不丢失：避免数据没来得及放入通道就被关闭
 	consumerWg   *sync.WaitGroup // 用于保证所有的consumer完成
 }
@@ -93,9 +94,10 @@ func getMq(topic string) *coolMQ {
 	return nil
 }
 
-func AddTopic(topic string, producerLimit, consumerLimit int, consumer func(msg *Msg)) {
+func AddTopic(topic string, producerLimit, consumerLimit int, consumer func(msg *Msg), closeTrigger func(topic string)) {
 	if !has(topic) {
 		mq := newCoolMQ(topic, producerLimit, consumerLimit, consumer)
+		mq.onClose = closeTrigger
 		lock.Lock()
 		mapMQ[topic] = mq
 		topicWg.Add(1)
@@ -145,7 +147,10 @@ func closeTopic(topic string) {
 		mq.consumerWg.Wait() // 等待所有的 consumer 完成
 		close(mq.dataChan)
 		topicWg.Done()
+		closeTrigger(topic)
+		lock.Lock()
 		delete(mapMQ, topic)
+		lock.Unlock()
 	}
 }
 
@@ -155,4 +160,14 @@ func Close() {
 		closeTopic(topic)
 	}
 	wait()
+}
+
+// topic任务完成后触发
+func closeTrigger(topic string) {
+	if has(topic) {
+		mq := getMq(topic)
+		if mq.onClose != nil {
+			mq.onClose(topic)
+		}
+	}
 }

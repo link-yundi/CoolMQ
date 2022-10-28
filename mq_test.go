@@ -20,9 +20,9 @@ func TestMQ(t *testing.T) {
 	task2 := "task2"
 	task3 := "task3"
 	// ========================== 添加主题 ==========================
-	AddTopic(task1, 100, 100, handler1) // 通过producerLimit以及consumerLimit控制任务效率
-	AddTopic(task2, 20, 100, handler2)
-	AddTopic(task3, 100, 100, handler3)
+	AddTopic(task1, 100, 100, handler1, task1Close) // 通过producerLimit以及consumerLimit控制任务效率
+	AddTopic(task2, 20, 100, handler2, nil)
+	AddTopic(task3, 100, 100, handler3, nil)
 	// ========================== 控制整体并发 ==========================
 	SetProducerLimit(1300)
 	// ========================== 启动 ==========================
@@ -30,7 +30,7 @@ func TestMQ(t *testing.T) {
 		// ========================== task1新增子任务 ==========================
 		for a := 0; a < 10; a++ {
 			topic1 := strconv.FormatInt(int64(a), 10)
-			AddTopic(topic1, 10, 10, handler1)
+			AddTopic(topic1, 10, 10, handler1, nil)
 			Produce(task1, i)
 		}
 		Produce(task2, i)
@@ -44,6 +44,10 @@ func handler1(msg *Msg) {
 	log.Debug(msg.Topic, msg.Data.(int))
 	time.Sleep(1 * time.Second)
 	Done(msg.Topic)
+}
+
+func task1Close(topic string) {
+	log.Info(topic, "CLOSE!")
 }
 
 func handler2(msg *Msg) {
