@@ -55,7 +55,7 @@ func newCoolMQ(topic string, producerLimit, consumerLimit int, consumer func(msg
 // 消费数据: 只要成功将数据丢给消费者，就是放一个生产者的限制，而不需要等待消费任务完成再释放，做到生产和消费分离
 func (mq *coolMQ) consume() {
 	msg := "启动mq: " + mq.topic
-	log.Info(msg)
+	log.Trace(msg)
 	for d := range mq.dataChan {
 		mq.consumerChan <- true
 		mq.consumerWg.Add(1)
@@ -64,7 +64,7 @@ func (mq *coolMQ) consume() {
 		<-mq.producerChan
 	}
 	msg = "关闭mq数据通道: " + mq.topic
-	log.Info(msg)
+	log.Trace(msg)
 }
 
 // ========================== mq 中心 ==========================
@@ -119,7 +119,7 @@ func Done(topic string) {
 
 func wait() {
 	topicWg.Wait()
-	log.Info("所有 TopicMQ 已关闭")
+	log.Trace("所有 TopicMQ 已关闭")
 }
 
 // 生产数据
