@@ -17,8 +17,6 @@ Created on 2022-10-27 14:12
 多个主题，每个主题都有多个生产者，多个消费者，确保消费者消费完数据并且做完相应的工作才退出
 */
 
-var CoolMQ = newCenter()
-
 type Msg struct {
 	Topic string
 	Data  any
@@ -69,67 +67,58 @@ func (mq *coolMQ) consume() {
 }
 
 // ========================== mq 中心 ==========================
-
-type center struct {
-	mapMQ        map[string]*coolMQ // key: topic
-	producerChan chan bool          // 用于控制全部生产者的并发数量
-	topicWg      *sync.WaitGroup    // 用于保证所有的topic都完成
-}
-
-func newCenter() *center {
-	mapMQ := make(map[string]*coolMQ, 0)
-	return &center{
-		mapMQ:        mapMQ,
-		producerChan: make(chan bool),
-		topicWg:      &sync.WaitGroup{},
-	}
-}
+var (
+	mapMQ        map[string]*coolMQ = map[string]*coolMQ{} // key: topic
+	producerChan chan bool          = make(chan bool)      // 用于控制全部生产者的并发数量
+	topicWg      *sync.WaitGroup    = &sync.WaitGroup{}    // 用于保证所有的topic都完成
+)
 
 // 控制整体生产数据的速度，调大理论上可以加速
-func (c *center) SetProducerLimit(producerLimit int) {
-	c.producerChan = make(chan bool, producerLimit)
+func SetProducerLimit(producerLimit int) {
+	producerChan = make(chan bool, producerLimit)
 }
 
-func (c *center) has(topic string) bool {
-	if _, ok := c.mapMQ[topic]; ok {
+func has(topic string) bool {
+	if _, ok := mapMQ[topic]; ok {
 		return true
 	}
 	return false
 }
 
-func (c *center) mq(topic string) *coolMQ {
-	if c.has(topic) {
-		return c.mapMQ[topic]
+func getMq(topic string) *coolMQ {
+	if has(topic) {
+		return mapMQ[topic]
 	}
 	return nil
 }
 
-func (c *center) AddTopic(topic string, producerLimit, consumerLimit int, consumer func(msg *Msg)) {
-	if !c.has(topic) {
-		c.mapMQ[topic] = newCoolMQ(topic, producerLimit, consumerLimit, consumer)
+func AddTopic(topic string, producerLimit, consumerLimit int, consumer func(msg *Msg)) {
+	if !has(topic) {
+		mapMQ[topic] = newCoolMQ(topic, producerLimit, consumerLimit, consumer)
 	}
 }
 
 // 消费完一个数据，通知
-func (c *center) Done(topic string) {
-	if c.has(topic) {
-		c.mq(topic).consumerWg.Done()
+func Done(topic string) {
+	if has(topic) {
+		mq := getMq(topic)
+		mq.consumerWg.Done()
 		// 释放 producer 以及 consumer 的限制
-		<-c.mq(topic).consumerChan
-		<-c.producerChan
+		<-mq.consumerChan
+		<-producerChan
 	}
 }
 
-func (c *center) wait() {
-	c.topicWg.Wait()
+func wait() {
+	topicWg.Wait()
 	log.Info("所有 TopicMQ 已关闭")
 }
 
 // 生产数据
-func (c *center) Produce(topic string, data any) {
-	if c.has(topic) {
-		mq := c.mq(topic)
-		c.producerChan <- true // 控制整体的并发数量：防止oom
+func Produce(topic string, data any) {
+	if has(topic) {
+		mq := getMq(topic)
+		producerChan <- true // 控制整体的并发数量：防止oom
 		mq.msgWg.Add(1)
 		go func(mq *coolMQ) {
 			mq.producerChan <- true
@@ -142,29 +131,29 @@ func (c *center) Produce(topic string, data any) {
 	}
 }
 
-func (c *center) Work() {
-	for _, mq := range c.mapMQ {
-		c.topicWg.Add(1)
+func Work() {
+	for _, mq := range mapMQ {
+		topicWg.Add(1)
 		go mq.consume()
 	}
 }
 
 // 关闭指定topic
-func (c *center) close(topic string) {
-	if c.has(topic) {
-		mq := c.mq(topic)
+func closeTopic(topic string) {
+	if has(topic) {
+		mq := getMq(topic)
 		mq.msgWg.Wait()      // 等待 msg 都被消费
 		mq.consumerWg.Wait() // 等待所有的 consumer 完成
 		close(mq.dataChan)
-		c.topicWg.Done()
-		delete(c.mapMQ, topic)
+		topicWg.Done()
+		delete(mapMQ, topic)
 	}
 }
 
 // 关闭所有topic
-func (c *center) Close() {
-	for topic, _ := range c.mapMQ {
-		go c.close(topic)
+func Close() {
+	for topic, _ := range mapMQ {
+		closeTopic(topic)
 	}
-	c.wait()
+	wait()
 }
