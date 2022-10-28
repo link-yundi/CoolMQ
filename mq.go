@@ -110,7 +110,7 @@ func (c *center) AddTopic(topic string, producerLimit, consumerLimit int, consum
 	}
 }
 
-// 消费完一个数据
+// 消费完一个数据，通知
 func (c *center) Done(topic string) {
 	if c.has(topic) {
 		c.mq(topic).consumerWg.Done()
@@ -157,6 +157,7 @@ func (c *center) close(topic string) {
 		mq.consumerWg.Wait() // 等待所有的 consumer 完成
 		close(mq.dataChan)
 		c.topicWg.Done()
+		delete(c.mapMQ, topic)
 	}
 }
 
