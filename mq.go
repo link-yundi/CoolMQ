@@ -69,10 +69,9 @@ func (mq *coolMQ) consume() {
 
 // ========================== mq 中心 ==========================
 var (
-	mapMQ        map[string]*coolMQ = map[string]*coolMQ{} // key: topic
-	producerChan chan bool          = make(chan bool)      // 用于控制全部生产者的并发数量
-	topicWg      *sync.WaitGroup    = &sync.WaitGroup{}    // 用于保证所有的topic都完成
-	lock                            = &sync.Mutex{}
+	mapMQ        = &sync.Map{}       // key: topic value: &coolMQ
+	producerChan = make(chan bool)   // 用于控制全部生产者的并发数量
+	topicWg      = &sync.WaitGroup{} // 用于保证所有的topic都完成
 )
 
 // 控制整体生产数据的速度，调大理论上可以加速
@@ -81,7 +80,7 @@ func SetProducerLimit(producerLimit int) {
 }
 
 func has(topic string) bool {
-	if _, ok := mapMQ[topic]; ok {
+	if _, ok := mapMQ.Load(topic); ok {
 		return true
 	}
 	return false
@@ -89,7 +88,8 @@ func has(topic string) bool {
 
 func getMq(topic string) *coolMQ {
 	if has(topic) {
-		return mapMQ[topic]
+		v, _ := mapMQ.Load(topic)
+		return v.(*coolMQ)
 	}
 	return nil
 }
@@ -98,11 +98,9 @@ func AddTopic(topic string, producerLimit, consumerLimit int, consumer func(msg 
 	if !has(topic) {
 		mq := newCoolMQ(topic, producerLimit, consumerLimit, consumer)
 		mq.onClose = closeTrigger
-		lock.Lock()
-		mapMQ[topic] = mq
+		mapMQ.Store(topic, mq)
 		topicWg.Add(1)
 		go mq.consume()
-		lock.Unlock()
 	}
 }
 
@@ -148,17 +146,19 @@ func closeTopic(topic string) {
 		close(mq.dataChan)
 		topicWg.Done()
 		closeTrigger(topic)
-		lock.Lock()
-		delete(mapMQ, topic)
-		lock.Unlock()
+		mapMQ.Delete(topic)
 	}
+}
+
+func mapRange(key, value any) bool {
+	topic := key.(string)
+	closeTopic(topic)
+	return true
 }
 
 // 关闭所有topic
 func Close() {
-	for topic, _ := range mapMQ {
-		closeTopic(topic)
-	}
+	mapMQ.Range(mapRange)
 	wait()
 }
 
