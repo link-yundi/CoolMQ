@@ -27,14 +27,17 @@ func main() {
 	CoolMQ.AddTopic(task3, 100, 100, handler3)
 	// ========================== 控制整体并发 ==========================
 	CoolMQ.SetProducerLimit(300)
-	// ========================== 启动 ==========================
-	CoolMQ.Work()
 	for i := 0; i < 100; i++ {
 		log.Debug(i)
 		// ========================== 生产数据 ==========================
-		CoolMQ.Produce(task1, i)
-		CoolMQ.Produce(task2, i)
-		CoolMQ.Produce(task3, i)
+		// ========================== task1新增子任务 ==========================
+		for a := 0; a < 10; a++ {
+        topic1 := strconv.FormatInt(int64(a), 10)
+        AddTopic(topic1, 10, 10, handler1)
+        Produce(task1, i)
+        }
+        Produce(task2, i)
+        Produce(task3, i)
 	}
 	// ========================== 堵塞等待关闭 ==========================
 	CoolMQ.Close()

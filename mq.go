@@ -71,6 +71,7 @@ var (
 	mapMQ        map[string]*coolMQ = map[string]*coolMQ{} // key: topic
 	producerChan chan bool          = make(chan bool)      // 用于控制全部生产者的并发数量
 	topicWg      *sync.WaitGroup    = &sync.WaitGroup{}    // 用于保证所有的topic都完成
+	lock                            = &sync.Mutex{}
 )
 
 // 控制整体生产数据的速度，调大理论上可以加速
@@ -94,7 +95,12 @@ func getMq(topic string) *coolMQ {
 
 func AddTopic(topic string, producerLimit, consumerLimit int, consumer func(msg *Msg)) {
 	if !has(topic) {
-		mapMQ[topic] = newCoolMQ(topic, producerLimit, consumerLimit, consumer)
+		mq := newCoolMQ(topic, producerLimit, consumerLimit, consumer)
+		lock.Lock()
+		mapMQ[topic] = mq
+		topicWg.Add(1)
+		go mq.consume()
+		lock.Unlock()
 	}
 }
 
@@ -128,13 +134,6 @@ func Produce(topic string, data any) {
 			}
 			mq.dataChan <- msg
 		}(mq)
-	}
-}
-
-func Work() {
-	for _, mq := range mapMQ {
-		topicWg.Add(1)
-		go mq.consume()
 	}
 }
 
