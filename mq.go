@@ -85,8 +85,8 @@ func has(topic string) bool {
 }
 
 func getMq(topic string) *coolMQ {
-	if has(topic) {
-		v, _ := mapMQ.Load(topic)
+	v, ok := mapMQ.Load(topic)
+	if ok {
 		return v.(*coolMQ)
 	}
 	return nil
