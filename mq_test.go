@@ -21,7 +21,7 @@ func TestMQ(t *testing.T) {
 	task3 := "task3"
 	// ========================== 添加主题 ==========================
 	AddTopic(task1, 100, 100, handler1, task1Close) // 通过producerLimit以及consumerLimit控制任务效率
-	AddTopic(task2, 20, 100, handler2, nil)
+	AddTopic(task2, 100, 100, handler2, nil)
 	AddTopic(task3, 100, 100, handler3, nil)
 	// ========================== 控制整体并发 ==========================
 	SetProducerLimit(1300)
@@ -30,14 +30,17 @@ func TestMQ(t *testing.T) {
 		// ========================== task1新增子任务 ==========================
 		for a := 0; a < 10; a++ {
 			topic1 := fmt.Sprintf("%d_%d", i, a)
-			AddTopic(topic1, 10, 10, handler1, nil)
+			AddTopic(topic1, 1, 1, handler1, nil)
 			Produce(task1, i)
+			Close(topic1)
 		}
 		Produce(task2, i)
 		Produce(task3, i)
 	}
-
-	Close() // 先完成的先关闭释放
+	Close(task1)
+	Close(task2)
+	Close(task3)
+	Wait()
 }
 
 func handler1(msg *Msg) {

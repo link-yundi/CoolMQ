@@ -115,7 +115,7 @@ func Done(topic string) {
 	}
 }
 
-func wait() {
+func Wait() {
 	topicWg.Wait()
 	log.Trace("所有 TopicMQ 已关闭")
 }
@@ -138,36 +138,19 @@ func Produce(topic string, data any) {
 }
 
 // 关闭指定topic
-func closeTopic(topic string) {
-	if has(topic) {
-		mq := getMq(topic)
-		mq.msgWg.Wait()      // 等待 msg 都被消费
-		mq.consumerWg.Wait() // 等待所有的 consumer 完成
-		close(mq.dataChan)
-		topicWg.Done()
-		closeTrigger(topic)
-		mapMQ.Delete(topic)
-	}
-}
+func Close(topic string) {
+	go func() {
+		if has(topic) {
+			mq := getMq(topic)
+			mq.msgWg.Wait()      // 等待 msg 都被消费
+			mq.consumerWg.Wait() // 等待所有的 consumer 完成
+			close(mq.dataChan)
+			if mq.onClose != nil {
+				mq.onClose(topic)
 
-func mapRange(key, value any) bool {
-	topic := key.(string)
-	closeTopic(topic)
-	return true
-}
-
-// 关闭所有topic
-func Close() {
-	mapMQ.Range(mapRange)
-	wait()
-}
-
-// topic任务完成后触发
-func closeTrigger(topic string) {
-	if has(topic) {
-		mq := getMq(topic)
-		if mq.onClose != nil {
-			mq.onClose(topic)
+			}
+			mapMQ.Delete(topic)
+			topicWg.Done()
 		}
-	}
+	}()
 }
