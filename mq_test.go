@@ -15,38 +15,64 @@ Created on 2022-10-27 16:40
 ------------------------------------------------
 **/
 
+var bus = NewMqBus()
+
 func TestMQ(t *testing.T) {
 	task1 := "task1"
 	task2 := "task2"
 	task3 := "task3"
 	// ========================== 添加主题 ==========================
-	AddTopic(task1, 100, 100, handler1, task1Close) // 通过producerLimit以及consumerLimit控制任务效率
-	AddTopic(task2, 100, 100, handler2, nil)
-	AddTopic(task3, 100, 100, handler3, nil)
+	AddTopic(bus, &MqConfig{
+		topic:         task1,
+		producerLimit: 100,
+		consumerLimit: 100,
+		consumer:      handler1,
+		closeTrigger:  task1Close,
+	}) // 通过producerLimit以及consumerLimit控制任务效率
+	AddTopic(bus, &MqConfig{
+		topic:         task2,
+		producerLimit: 100,
+		consumerLimit: 100,
+		consumer:      handler2,
+		closeTrigger:  nil,
+	})
+	AddTopic(bus, &MqConfig{
+		topic:         task3,
+		producerLimit: 100,
+		consumerLimit: 100,
+		consumer:      nil,
+		closeTrigger:  nil,
+	})
 	// ========================== 控制整体并发 ==========================
-	SetProducerLimit(1300)
+	SetProducerLimit(bus, 1300)
 	// ========================== 启动 ==========================
 	for i := 0; i < 100; i++ {
 		// ========================== task1新增子任务 ==========================
 		for a := 0; a < 10; a++ {
 			topic1 := fmt.Sprintf("%d_%d", i, a)
-			AddTopic(topic1, 1, 1, handler1, nil)
-			Produce(task1, i)
-			go Close(topic1) // 可交由协程也可堵塞关闭
+			AddTopic(bus, &MqConfig{
+				topic:         topic1,
+				producerLimit: 10,
+				consumerLimit: 10,
+				consumer:      handler1,
+				closeTrigger:  nil,
+			})
+			Produce(bus, task1, i)
+			go Close(bus, topic1) // 可交由协程也可堵塞关闭
 		}
-		Produce(task2, i)
-		Produce(task3, i)
+		Produce(bus, task2, i)
+		Produce(bus, task3, i)
 	}
 	// 交由后台等待任务完成关闭
-	go Close(task1, task2, task3)
+	go Close(bus, task1, task2, task3)
 	// 堵塞等待所有topic完成
-	Wait()
+	Wait(bus)
 }
 
 func handler1(msg *Msg) {
 	log.Debug(msg.Topic, msg.Data.(int))
 	time.Sleep(1 * time.Second)
-	Done(msg.Topic)
+	Done(bus, msg.Topic)
 }
 
 func task1Close(topic string) {
@@ -56,11 +82,11 @@ func task1Close(topic string) {
 func handler2(msg *Msg) {
 	//fmt.Println(msg.Topic, msg.Data.(int))
 	time.Sleep(10 * time.Second)
-	Done(msg.Topic)
+	Done(bus, msg.Topic)
 }
 
 func handler3(msg *Msg) {
 	//fmt.Println(msg.Topic, msg.Data.(int))
 	time.Sleep(5 * time.Second)
-	Done(msg.Topic)
+	Done(bus, msg.Topic)
 }
