@@ -67,11 +67,11 @@ func (mq *coolMQ) consume() {
 
 // ========================== mq 配置 ==========================
 type MqConfig struct {
-	topic         string
-	producerLimit int
-	consumerLimit int
-	consumer      func(msg *Msg)
-	closeTrigger  func(topic string)
+	Topic         string
+	ProducerLimit int
+	ConsumerLimit int
+	Consumer      func(msg *Msg)
+	CloseTrigger  func(topic string)
 }
 
 // ========================== mq 中心 ==========================
@@ -110,10 +110,10 @@ func getMq(bus *MqBus, topic string) *coolMQ {
 }
 
 func AddTopic(bus *MqBus, mqConf *MqConfig) {
-	if !has(bus, mqConf.topic) {
-		mq := newCoolMQ(mqConf.topic, mqConf.producerLimit, mqConf.consumerLimit, mqConf.consumer)
-		mq.onClose = mqConf.closeTrigger
-		bus.mapMQ.Store(mqConf.topic, mq)
+	if !has(bus, mqConf.Topic) {
+		mq := newCoolMQ(mqConf.Topic, mqConf.ProducerLimit, mqConf.ConsumerLimit, mqConf.Consumer)
+		mq.onClose = mqConf.CloseTrigger
+		bus.mapMQ.Store(mqConf.Topic, mq)
 		bus.topicWg.Add(1)
 		go mq.consume()
 	}

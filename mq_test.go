@@ -23,25 +23,25 @@ func TestMQ(t *testing.T) {
 	task3 := "task3"
 	// ========================== 添加主题 ==========================
 	AddTopic(bus, &MqConfig{
-		topic:         task1,
-		producerLimit: 100,
-		consumerLimit: 100,
-		consumer:      handler1,
-		closeTrigger:  task1Close,
+		Topic:         task1,
+		ProducerLimit: 100,
+		ConsumerLimit: 100,
+		Consumer:      handler1,
+		CloseTrigger:  task1Close,
 	}) // 通过producerLimit以及consumerLimit控制任务效率
 	AddTopic(bus, &MqConfig{
-		topic:         task2,
-		producerLimit: 100,
-		consumerLimit: 100,
-		consumer:      handler2,
-		closeTrigger:  nil,
+		Topic:         task2,
+		ProducerLimit: 100,
+		ConsumerLimit: 100,
+		Consumer:      handler2,
+		CloseTrigger:  nil,
 	})
 	AddTopic(bus, &MqConfig{
-		topic:         task3,
-		producerLimit: 100,
-		consumerLimit: 100,
-		consumer:      nil,
-		closeTrigger:  nil,
+		Topic:         task3,
+		ProducerLimit: 100,
+		ConsumerLimit: 100,
+		Consumer:      nil,
+		CloseTrigger:  nil,
 	})
 	// ========================== 控制整体并发 ==========================
 	SetProducerLimit(bus, 1300)
@@ -51,11 +51,11 @@ func TestMQ(t *testing.T) {
 		for a := 0; a < 10; a++ {
 			topic1 := fmt.Sprintf("%d_%d", i, a)
 			AddTopic(bus, &MqConfig{
-				topic:         topic1,
-				producerLimit: 10,
-				consumerLimit: 10,
-				consumer:      handler1,
-				closeTrigger:  nil,
+				Topic:         topic1,
+				ProducerLimit: 10,
+				ConsumerLimit: 10,
+				Consumer:      handler1,
+				CloseTrigger:  nil,
 			})
 			Produce(bus, task1, i)
 			go Close(bus, topic1) // 可交由协程也可堵塞关闭

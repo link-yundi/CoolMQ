@@ -24,17 +24,41 @@ func main() {
     task2 := "task2"
     task3 := "task3"
     // ========================== 添加主题 ==========================
-    AddTopic(bus, task1, 100, 100, handler1, task1Close) // 通过producerLimit以及consumerLimit控制任务效率
-    AddTopic(bus, task2, 100, 100, handler2, nil)
-    AddTopic(bus, task3, 100, 100, handler3, nil)
+    AddTopic(bus, &MqConfig{
+        Topic:         task1,
+        ProducerLimit: 100,
+        ConsumerLimit: 100,
+        Consumer:      handler1,
+        CloseTrigger:  task1Close,
+    }) // 通过producerLimit以及consumerLimit控制任务效率
+    AddTopic(bus, &MqConfig{
+        Topic:         task2,
+        ProducerLimit: 100,
+        ConsumerLimit: 100,
+        Consumer:      handler2,
+        CloseTrigger:  nil,
+    })
+    AddTopic(bus, &MqConfig{
+        Topic:         task3,
+        ProducerLimit: 100,
+        ConsumerLimit: 100,
+        Consumer:      nil,
+        CloseTrigger:  nil,
+    })
     // ========================== 控制整体并发 ==========================
     SetProducerLimit(bus, 1300)
     // ========================== 启动 ==========================
     for i := 0; i < 100; i++ {
         // ========================== task1新增子任务 ==========================
         for a := 0; a < 10; a++ {
-            topic1 := fmt.Sprintf("%d_%d", i, a)
-            AddTopic(bus, topic1, 1, 1, handler1, nil)
+            Topic1 := fmt.Sprintf("%d_%d", i, a)
+            AddTopic(bus, &MqConfig{
+                Topic:         topic1,
+                ProducerLimit: 10,
+                ConsumerLimit: 10,
+                Consumer:      handler1,
+                CloseTrigger:  nil,
+            })
             Produce(bus, task1, i)
             go Close(bus, topic1) // 可交由协程也可堵塞关闭
         }
@@ -69,4 +93,3 @@ func handler3(msg *Msg) {
     Done(bus, msg.Topic)
 }
 ```
-
