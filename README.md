@@ -33,15 +33,13 @@ func main() {
             topic1 := fmt.Sprintf("%d_%d", i, a)
             coolmq.AddTopic(topic1, 1, 1, handler1, nil)
             coolmq.Produce(task1, i)
-            coolmq.Close(topic1)
+            go coolmq.Close(topic1) // 可交由协程也可堵塞关闭
         }
         coolmq.Produce(task2, i)
         coolmq.Produce(task3, i)
     }
     // 交由后台等待任务完成关闭
-    coolmq.Close(task1)
-    coolmq.Close(task2)
-    coolmq.Close(task3)
+	go coolmq.Close(task1, task2, task3)
     // 堵塞等待所有topic完成
     coolmq.Wait()
 }

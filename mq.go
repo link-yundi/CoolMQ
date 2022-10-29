@@ -138,8 +138,8 @@ func Produce(topic string, data any) {
 }
 
 // 关闭指定topic
-func Close(topic string) {
-	go func() {
+func Close(topics ...string) {
+	for _, topic := range topics {
 		if has(topic) {
 			mq := getMq(topic)
 			mq.msgWg.Wait()      // 等待 msg 都被消费
@@ -152,5 +152,5 @@ func Close(topic string) {
 			mapMQ.Delete(topic)
 			topicWg.Done()
 		}
-	}()
+	}
 }

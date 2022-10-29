@@ -32,15 +32,13 @@ func TestMQ(t *testing.T) {
 			topic1 := fmt.Sprintf("%d_%d", i, a)
 			AddTopic(topic1, 1, 1, handler1, nil)
 			Produce(task1, i)
-			Close(topic1)
+			go Close(topic1) // 可交由协程也可堵塞关闭
 		}
 		Produce(task2, i)
 		Produce(task3, i)
 	}
 	// 交由后台等待任务完成关闭
-	Close(task1)
-	Close(task2)
-	Close(task3)
+	go Close(task1, task2, task3)
 	// 堵塞等待所有topic完成
 	Wait()
 }
