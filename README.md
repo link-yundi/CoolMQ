@@ -17,29 +17,33 @@ go get -u github.com/link-yundi/coolmq
 
 ```go
 func main() {
-	task1 := "task1"
-	task2 := "task2"
-	task3 := "task3"
-	// ========================== 添加主题 ==========================
-	coolmq.AddTopic(task1, 100, 100, handler1, task1Close) // 控制task1的速度
-	coolmq.AddTopic(task2, 100, 20, handler2, nil) 
-	coolmq.AddTopic(task3, 100, 100, handler3, nil)
-	// ========================== 控制整体并发 ==========================
-    coolmq.SetProducerLimit(300)
-	for i := 0; i < 100; i++ {
-		log.Debug(i)
-		// ========================== 生产数据 ==========================
-		// ========================== task1新增子任务 ==========================
-		for a := 0; a < 10; a++ {
+    task1 := "task1"
+    task2 := "task2"
+    task3 := "task3"
+    // ========================== 添加主题 ==========================
+    coolmq.AddTopic(task1, 100, 100, handler1, task1Close) // 通过producerLimit以及consumerLimit控制任务效率
+    coolmq.AddTopic(task2, 100, 100, handler2, nil)
+    coolmq.AddTopic(task3, 100, 100, handler3, nil)
+    // ========================== 控制整体并发 ==========================
+    coolmq.SetProducerLimit(1300)
+    // ========================== 启动 ==========================
+    for i := 0; i < 100; i++ {
+    // ========================== task1新增子任务 ==========================
+        for a := 0; a < 10; a++ {
             topic1 := fmt.Sprintf("%d_%d", i, a)
-            AddTopic(topic1, 10, 10, handler1, nil)
-            Produce(task1, i)
+            coolmq.AddTopic(topic1, 1, 1, handler1, nil)
+            coolmq.Produce(task1, i)
+            coolmq.Close(topic1)
         }
         coolmq.Produce(task2, i)
         coolmq.Produce(task3, i)
-	}
-	// ========================== 堵塞等待关闭 ==========================
-	coolmq.Close()
+    }
+    // 交由后台等待任务完成关闭
+    coolmq.Close(task1)
+    coolmq.Close(task2)
+    coolmq.Close(task3)
+    // 堵塞等待所有topic完成
+    coolmq.Wait()
 }
 
 func handler1(msg *Msg) {

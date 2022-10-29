@@ -37,9 +37,11 @@ func TestMQ(t *testing.T) {
 		Produce(task2, i)
 		Produce(task3, i)
 	}
+	// 交由后台等待任务完成关闭
 	Close(task1)
 	Close(task2)
 	Close(task3)
+	// 堵塞等待所有topic完成
 	Wait()
 }
 
