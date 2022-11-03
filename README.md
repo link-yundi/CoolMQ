@@ -45,28 +45,27 @@ func main() {
         Consumer:      nil,
         CloseTrigger:  nil,
     })
-    // ========================== 控制整体并发 ==========================
-    SetProducerLimit(bus, 1300)
     // ========================== 启动 ==========================
     for i := 0; i < 100; i++ {
-        // ========================== task1新增子任务 ==========================
+    // ========================== task1新增子任务 ==========================
+        topic1 := fmt.Sprintf("%d", i)
+        AddTopic(bus, &MqConfig{
+            Topic:         topic1,
+            ProducerLimit: 100,
+            ConsumerLimit: 100,
+            Consumer:      handler2, // 如果没有并发，消费一个需要10s
+            CloseTrigger:  nil,
+        })
         for a := 0; a < 10; a++ {
-            Topic1 := fmt.Sprintf("%d_%d", i, a)
-            AddTopic(bus, &MqConfig{
-                Topic:         topic1,
-                ProducerLimit: 10,
-                ConsumerLimit: 10,
-                Consumer:      handler1,
-                CloseTrigger:  nil,
-            })
-            Produce(bus, task1, i)
-            go Close(bus, topic1) // 可交由协程也可堵塞关闭
+            Produce(bus, topic1, a)
         }
+        Produce(bus, task1, i)
         Produce(bus, task2, i)
         Produce(bus, task3, i)
+        Stop(bus, topic1)
     }
     // 交由后台等待任务完成关闭
-    go Close(bus, task1, task2, task3)
+    Stop(bus, task1, task2, task3)
     // 堵塞等待所有topic完成
     Wait(bus)
 }

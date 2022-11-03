@@ -29,8 +29,8 @@ type coolMQ struct {
 	consumerChan chan bool // 带缓存的channel,控制消费者的并发数量上限
 	consumer     func(msg *Msg)
 	onClose      func(topic string)
-	msgWg        *sync.WaitGroup // 用于保证msg不丢失：避免数据没来得及放入通道就被关闭
-	consumerWg   *sync.WaitGroup // 用于保证所有的consumer完成
+	consumerWg   *sync.WaitGroup
+	msgWg        *sync.WaitGroup
 }
 
 func newCoolMQ(topic string, producerLimit, consumerLimit int, consumer func(msg *Msg)) *coolMQ {
@@ -47,13 +47,13 @@ func newCoolMQ(topic string, producerLimit, consumerLimit int, consumer func(msg
 		producerChan: producerChan,
 		consumerChan: consumerChan,
 		consumer:     consumer,
-		msgWg:        &sync.WaitGroup{},
 		consumerWg:   &sync.WaitGroup{},
+		msgWg:        &sync.WaitGroup{},
 	}
 }
 
 // 消费数据: 只要成功将数据丢给消费者，就是放一个生产者的限制，而不需要等待消费任务完成再释放，做到生产和消费分离
-func (mq *coolMQ) consume() {
+func (mq *coolMQ) work() {
 	msg := "启动mq: " + mq.topic
 	log.Trace(msg)
 	for d := range mq.dataChan {
@@ -76,22 +76,15 @@ type MqConfig struct {
 
 // ========================== mq 中心 ==========================
 type MqBus struct {
-	mapMQ        *sync.Map
-	producerChan chan bool
-	topicWg      *sync.WaitGroup
+	mapMQ   *sync.Map
+	topicWg *sync.WaitGroup
 }
 
 func NewMqBus() *MqBus {
 	return &MqBus{
-		mapMQ:        &sync.Map{},
-		producerChan: make(chan bool),
-		topicWg:      &sync.WaitGroup{},
+		mapMQ:   &sync.Map{},
+		topicWg: &sync.WaitGroup{},
 	}
-}
-
-// 控制整体生产数据的速度，调大理论上可以加速
-func SetProducerLimit(bus *MqBus, producerLimit int) {
-	bus.producerChan = make(chan bool, producerLimit)
 }
 
 func has(bus *MqBus, topic string) bool {
@@ -115,7 +108,7 @@ func AddTopic(bus *MqBus, mqConf *MqConfig) {
 		mq.onClose = mqConf.CloseTrigger
 		bus.mapMQ.Store(mqConf.Topic, mq)
 		bus.topicWg.Add(1)
-		go mq.consume()
+		go mq.work()
 	}
 }
 
@@ -125,10 +118,9 @@ func Done(bus *MqBus, topic string) {
 		mq := getMq(bus, topic)
 		mq.msgWg.Done()
 		mq.consumerWg.Done()
-		<-mq.producerChan
 		// 释放 producer 以及 consumer 的限制
+		<-mq.producerChan
 		<-mq.consumerChan
-		<-bus.producerChan
 	}
 }
 
@@ -144,10 +136,9 @@ func Produce(bus *MqBus, topic string, data any) {
 		if mq.consumer == nil {
 			return
 		}
-		bus.producerChan <- true // 控制整体的并发数量：防止oom
-		mq.msgWg.Add(1)
+		mq.msgWg.Add(1) // 有时生产数据的过程过于缓慢
+		mq.producerChan <- true
 		go func(mq *coolMQ) {
-			mq.producerChan <- true
 			msg := &Msg{
 				Topic: topic,
 				Data:  data,
@@ -157,19 +148,21 @@ func Produce(bus *MqBus, topic string, data any) {
 	}
 }
 
-// 关闭指定topic
-func Close(bus *MqBus, topics ...string) {
+// 停止指定topic
+func Stop(bus *MqBus, topics ...string) {
 	for _, topic := range topics {
 		if has(bus, topic) {
-			mq := getMq(bus, topic)
-			mq.msgWg.Wait()      // 等待 msg 都被消费
-			mq.consumerWg.Wait() // 等待所有的 consumer 完成
-			close(mq.dataChan)
-			if mq.onClose != nil {
-				mq.onClose(topic)
-			}
-			bus.mapMQ.Delete(topic)
-			bus.topicWg.Done()
+			go func(topic string) {
+				mq := getMq(bus, topic)
+				mq.msgWg.Wait()      // 等待所有的消息 被拿出来
+				mq.consumerWg.Wait() // 等待所有的 consumer 完成
+				close(mq.dataChan)
+				if mq.onClose != nil {
+					mq.onClose(topic)
+				}
+				bus.mapMQ.Delete(topic)
+				bus.topicWg.Done()
+			}(topic)
 		}
 	}
 }
