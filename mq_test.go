@@ -1,6 +1,7 @@
 package coolmq
 
 import (
+	"fmt"
 	log "github.com/link-yundi/ylog"
 	"testing"
 	"time"
@@ -45,23 +46,23 @@ func TestMQ(t *testing.T) {
 	})
 	// ========================== 启动 ==========================
 	for i := 0; i < 100; i++ {
-		log.Debug(i)
+		//log.Debug(i)
 		// ========================== task1新增子任务 ==========================
-		//topic1 := fmt.Sprintf("%d", i)
-		//AddTopic(bus, &MqConfig{
-		//	Topic:         topic1,
-		//	ProducerLimit: 10,
-		//	ConsumerLimit: 10,
-		//	Consumer:      handler2, // 如果没有并发，消费一个需要10s
-		//	CloseTrigger:  nil,
-		//})
-		//for a := 0; a < 10; a++ {
-		//	Produce(bus, topic1, a)
-		//}
+		topic1 := fmt.Sprintf("%d", i)
+		AddTopic(bus, &MqConfig{
+			Topic:         topic1,
+			ProducerLimit: 10,
+			ConsumerLimit: 10,
+			Consumer:      handler2, // 如果没有并发，消费一个需要10s
+			CloseTrigger:  nil,
+		})
+		for a := 0; a < 10; a++ {
+			Produce(bus, topic1, a)
+		}
 		Produce(bus, task1, i)
 		Produce(bus, task2, i)
 		Produce(bus, task3, i)
-		//Stop(bus, topic1)
+		Stop(bus, topic1)
 	}
 	// 交由后台等待任务完成关闭
 	Stop(bus, task1, task2, task3)

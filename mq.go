@@ -30,7 +30,6 @@ type coolMQ struct {
 	onClose      func(topic string)
 	producerPool *coolparallel.ParallelPool // 生产池
 	consumerPool *coolparallel.ParallelPool // 消费池
-	msgWg        *sync.WaitGroup
 }
 
 func newCoolMQ(topic string, producerLimit, consumerLimit int, consumer func(msg *Msg)) *coolMQ {
@@ -45,7 +44,6 @@ func newCoolMQ(topic string, producerLimit, consumerLimit int, consumer func(msg
 		consumer:     consumer,
 		producerPool: coolparallel.NewParallelPool(producerLimit),
 		consumerPool: coolparallel.NewParallelPool(consumerLimit),
-		msgWg:        &sync.WaitGroup{},
 	}
 }
 
@@ -57,7 +55,6 @@ func (mq *coolMQ) listen() {
 		if mq.consumer != nil {
 			mq.consumerPool.AddTask(mq.consume, d)
 		}
-		mq.msgWg.Done()
 	}
 	msg = "关闭mq数据通道: " + mq.topic
 	log.Trace(msg)
@@ -144,7 +141,6 @@ func Produce(bus *MqBus, topic string, data any) {
 			Topic: topic,
 			Data:  data,
 		}
-		mq.msgWg.Add(1)
 		mq.producerPool.AddTask(mq.produce, msg)
 	}
 }
@@ -155,7 +151,6 @@ func Stop(bus *MqBus, topics ...string) {
 		if has(bus, topic) {
 			go func(topic string) {
 				mq := getMq(bus, topic)
-				mq.msgWg.Wait()
 				mq.producerPool.Wait()
 				mq.consumerPool.Wait()
 				close(mq.dataChan)
