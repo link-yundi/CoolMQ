@@ -1,6 +1,7 @@
 package coolmq
 
 import (
+	"github.com/link-yundi/coolparallel"
 	log "github.com/link-yundi/ylog"
 	"sync"
 )
@@ -25,12 +26,10 @@ type Msg struct {
 type coolMQ struct {
 	topic        string
 	dataChan     chan *Msg // 消息通道
-	producerChan chan bool // 带缓存的channel,控制生产者的并发数量上限
-	consumerChan chan bool // 带缓存的channel,控制消费者的并发数量上限
 	consumer     func(msg *Msg)
 	onClose      func(topic string)
-	consumerWg   *sync.WaitGroup
-	msgWg        *sync.WaitGroup
+	producerPool *coolparallel.ParallelPool // 生产池
+	consumerPool *coolparallel.ParallelPool // 消费池
 }
 
 func newCoolMQ(topic string, producerLimit, consumerLimit int, consumer func(msg *Msg)) *coolMQ {
@@ -39,30 +38,44 @@ func newCoolMQ(topic string, producerLimit, consumerLimit int, consumer func(msg
 		chanLen = consumerLimit
 	}
 	dataChan := make(chan *Msg, chanLen)
-	producerChan := make(chan bool, producerLimit)
-	consumerChan := make(chan bool, consumerLimit)
 	return &coolMQ{
 		topic:        topic,
 		dataChan:     dataChan,
-		producerChan: producerChan,
-		consumerChan: consumerChan,
 		consumer:     consumer,
-		consumerWg:   &sync.WaitGroup{},
-		msgWg:        &sync.WaitGroup{},
+		producerPool: coolparallel.NewParallelPool(producerLimit),
+		consumerPool: coolparallel.NewParallelPool(consumerLimit),
 	}
 }
 
-// 消费数据: 只要成功将数据丢给消费者，就是放一个生产者的限制，而不需要等待消费任务完成再释放，做到生产和消费分离
-func (mq *coolMQ) work() {
+// 监听
+func (mq *coolMQ) listen() {
 	msg := "启动mq: " + mq.topic
 	log.Trace(msg)
 	for d := range mq.dataChan {
-		mq.consumerChan <- true
-		mq.consumerWg.Add(1)
-		go mq.consumer(d)
+		if mq.consumer != nil {
+			mq.consumerPool.AddTask(mq.consume, d)
+		}
 	}
 	msg = "关闭mq数据通道: " + mq.topic
 	log.Trace(msg)
+}
+
+// 消费数据
+func (mq *coolMQ) consume(arg any) {
+	d, ok := arg.(*Msg)
+	if !ok {
+		return
+	}
+	mq.consumer(d)
+}
+
+// 生产数据
+func (mq *coolMQ) produce(arg any) {
+	msg, ok := arg.(*Msg)
+	if !ok {
+		return
+	}
+	mq.dataChan <- msg
 }
 
 // ========================== mq 配置 ==========================
@@ -108,19 +121,7 @@ func AddTopic(bus *MqBus, mqConf *MqConfig) {
 		mq.onClose = mqConf.CloseTrigger
 		bus.mapMQ.Store(mqConf.Topic, mq)
 		bus.topicWg.Add(1)
-		go mq.work()
-	}
-}
-
-// 消费完一个数据，通知
-func Done(bus *MqBus, topic string) {
-	if has(bus, topic) {
-		mq := getMq(bus, topic)
-		mq.msgWg.Done()
-		mq.consumerWg.Done()
-		// 释放 producer 以及 consumer 的限制
-		<-mq.producerChan
-		<-mq.consumerChan
+		go mq.listen()
 	}
 }
 
@@ -136,15 +137,11 @@ func Produce(bus *MqBus, topic string, data any) {
 		if mq.consumer == nil {
 			return
 		}
-		mq.msgWg.Add(1) // 有时生产数据的过程过于缓慢
-		mq.producerChan <- true
-		go func(mq *coolMQ) {
-			msg := &Msg{
-				Topic: topic,
-				Data:  data,
-			}
-			mq.dataChan <- msg
-		}(mq)
+		msg := &Msg{
+			Topic: topic,
+			Data:  data,
+		}
+		mq.producerPool.AddTask(mq.produce, msg)
 	}
 }
 
@@ -154,8 +151,8 @@ func Stop(bus *MqBus, topics ...string) {
 		if has(bus, topic) {
 			go func(topic string) {
 				mq := getMq(bus, topic)
-				mq.msgWg.Wait()      // 等待所有的消息 被拿出来
-				mq.consumerWg.Wait() // 等待所有的 consumer 完成
+				mq.producerPool.Wait()
+				mq.consumerPool.Wait()
 				close(mq.dataChan)
 				if mq.onClose != nil {
 					mq.onClose(topic)
